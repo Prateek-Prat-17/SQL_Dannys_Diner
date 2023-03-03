@@ -1,0 +1,164 @@
+CREATE DATABASE dannys_diner;
+USE DANNYS_DINER
+
+CREATE TABLE sales (
+  "customer_id" VARCHAR(1),
+  "order_date" DATE,
+  "product_id" INTEGER
+);
+
+INSERT INTO sales
+  ("customer_id", "order_date", "product_id")
+VALUES
+  ('A', '2021-01-01', '1'),
+  ('A', '2021-01-01', '2'),
+  ('A', '2021-01-07', '2'),
+  ('A', '2021-01-10', '3'),
+  ('A', '2021-01-11', '3'),
+  ('A', '2021-01-11', '3'),
+  ('B', '2021-01-01', '2'),
+  ('B', '2021-01-02', '2'),
+  ('B', '2021-01-04', '1'),
+  ('B', '2021-01-11', '1'),
+  ('B', '2021-01-16', '3'),
+  ('B', '2021-02-01', '3'),
+  ('C', '2021-01-01', '3'),
+  ('C', '2021-01-01', '3'),
+  ('C', '2021-01-07', '3');
+ 
+
+CREATE TABLE menu (
+  "product_id" INTEGER,
+  "product_name" VARCHAR(5),
+  "price" INTEGER
+);
+
+INSERT INTO menu
+  ("product_id", "product_name", "price")
+VALUES
+  ('1', 'sushi', '10'),
+  ('2', 'curry', '15'),
+  ('3', 'ramen', '12');
+  
+
+CREATE TABLE members (
+  "customer_id" VARCHAR(1),
+  "join_date" DATE
+);
+
+INSERT INTO members
+  ("customer_id", "join_date")
+VALUES
+  ('A', '2021-01-07'),
+  ('B', '2021-01-09');
+
+
+
+                                          ----- Case Study Questions--------
+SELECT * FROM MEMBERS
+SELECT * FROM MENU
+SELECT * FROM SALES
+
+
+-- 1. What is the total amount each customer spent at the restaurant?
+SELECT CUSTOMER_ID,SUM(PRICE) AS TOTAL_AMT_SPENT FROM MENU A 
+INNER JOIN SALES B ON A.PRODUCT_ID = B.PRODUCT_ID
+GROUP BY B.CUSTOMER_ID
+
+
+-- 2. How many days has each customer visited the restaurant?
+SELECT CUSTOMER_ID,COUNT(DISTINCT(ORDER_DATE)) AS NO_OF_VISITS 
+FROM SALES
+GROUP BY CUSTOMER_ID
+
+
+
+
+-- 3. What was the first item from the menu purchased by each customer?
+SELECT DISTINCT(CUSTOMER_ID),PRODUCT_NAME FROM SALES A INNER JOIN
+MENU B ON A.PRODUCT_ID=B.PRODUCT_ID 
+WHERE A.ORDER_DATE = (SELECT MIN(ORDER_DATE) FROM SALES)
+GROUP BY CUSTOMER_ID,PRODUCT_NAME
+
+
+
+-- 4. What is the most purchased item on the menu and how many times was it purchased by all customers?
+SELECT PRODUCT_NAME,COUNT(PRODUCT_NAME) AS PRODUCT_PURCHASED FROM MENU A 
+INNER JOIN SALES B ON A.PRODUCT_ID=B.PRODUCT_ID
+GROUP BY PRODUCT_NAME
+
+
+-- 5. Which item was the most popular for each customer?
+WITH CTE AS
+(SELECT CUSTOMER_ID,PRODUCT_NAME,COUNT(S.PRODUCT_ID) AS PRODUCT_PURCHASED,
+DENSE_RANK() OVER (PARTITION BY S.CUSTOMER_ID ORDER BY COUNT(S.PRODUCT_ID) DESC)
+AS RANK_
+FROM SALES S INNER JOIN MENU M ON S.PRODUCT_ID=M.PRODUCT_ID
+GROUP BY CUSTOMER_ID,PRODUCT_NAME)
+SELECT CUSTOMER_ID,PRODUCT_NAME,PRODUCT_PURCHASED FROM CTE 
+WHERE RANK_=1
+
+---COLLECTIVELY RAMEN WAS MOST POPULAR AMONG CUSTOMERS!
+
+
+-- 6. Which item was purchased first by the customer after they became a member?
+WITH CTE2 AS
+(SELECT S.CUSTOMER_ID,PRODUCT_NAME,DENSE_RANK() OVER (PARTITION  BY S.CUSTOMER_ID
+ORDER BY S.ORDER_DATE) AS RANK_
+FROM SALES S INNER JOIN
+MENU M ON S.PRODUCT_ID=M.PRODUCT_ID INNER JOIN 
+MEMBERS ME ON ME.CUSTOMER_ID=S.CUSTOMER_ID
+WHERE S.ORDER_DATE>=ME.JOIN_DATE
+GROUP BY S.CUSTOMER_ID,PRODUCT_NAME,S.ORDER_DATE)
+SELECT CUSTOMER_ID,PRODUCT_NAME FROM CTE2 WHERE RANK_=1
+
+
+-- 7. Which item was purchased just before the customer became a member?
+WITH CTE3 AS
+(SELECT S.CUSTOMER_ID,PRODUCT_NAME,DENSE_RANK() OVER (PARTITION  BY S.CUSTOMER_ID
+ORDER BY S.ORDER_DATE) AS RANK_
+FROM SALES S INNER JOIN
+MENU M ON S.PRODUCT_ID=M.PRODUCT_ID INNER JOIN 
+MEMBERS ME ON ME.CUSTOMER_ID=S.CUSTOMER_ID
+WHERE S.ORDER_DATE<ME.JOIN_DATE
+GROUP BY S.CUSTOMER_ID,PRODUCT_NAME,S.ORDER_DATE)
+SELECT CUSTOMER_ID,PRODUCT_NAME FROM CTE3 WHERE RANK_=1
+
+
+-- 8. What is the total items and amount spent for each member before they became a member?
+SELECT S.CUSTOMER_ID,COUNT(S.PRODUCT_ID) AS TOTAL_ITEM,SUM(PRICE) AS AMT_SPENT
+FROM SALES S INNER JOIN MENU M ON S.PRODUCT_ID=M.PRODUCT_ID
+INNER JOIN MEMBERS ME ON ME.CUSTOMER_ID=S.CUSTOMER_ID
+WHERE S.ORDER_DATE<ME.JOIN_DATE
+GROUP BY S.CUSTOMER_ID
+
+
+-- 9.  If each $1 spent equates to 10 points and sushi has a 2x points multiplier - how many points would each customer have?
+WITH CTE4 AS
+(SELECT *, CASE WHEN PRODUCT_NAME='SUSHI' THEN PRICE*20
+WHEN PRODUCT_NAME!='SUSHI' THEN PRICE*10 END AS POINTS
+FROM MENU M)
+SELECT CUSTOMER_ID,SUM(POINTS) AS POINTS FROM SALES S
+INNER JOIN CTE4 C ON C.PRODUCT_ID=S.PRODUCT_ID
+GROUP BY S.CUSTOMER_ID
+
+
+-- 10. In the first week after a customer joins the program (including their join date) they earn 2x points on all items,
+--- not just sushi - how many points do customer A and B have at the end of January?
+
+WITH CTE5 AS 
+(SELECT *, DATEADD(DAY, 6, JOIN_DATE) AS FIRST_WEEK_DATE,
+EOMONTH('2021-01-31') AS LAST_DATE FROM MEMBERS)
+SELECT  S.CUSTOMER_ID,
+SUM(CASE WHEN S.ORDER_DATE BETWEEN C.JOIN_DATE AND FIRST_WEEK_DATE THEN M.PRICE*20
+ELSE PRICE*10 END) AS POINTS FROM MENU M
+INNER JOIN SALES S ON S.PRODUCT_ID=M.PRODUCT_ID
+INNER JOIN CTE5 C ON C.CUSTOMER_ID= S.CUSTOMER_ID
+GROUP BY S.CUSTOMER_ID
+
+
+
+
+
+
+
